@@ -2,11 +2,18 @@ local ggPrefixColor
 local compareItemStats = {}
 local compareItemScore
 
+local compareRunning = false
+
 local customStatWeigths = {
    [1] = {
       ["Name"] = "DPS",
       ["Match"] = "%((%d+[.,]%d+) " .. string.lower(DAMAGE_PER_SECOND) .. "%)",
       ["Weight"] = 1
+   },
+   [2] = {
+      ["Name"] = "Armor",
+      ["Match"] = "(%d+) " .. RESISTANCE0_NAME,
+      ["Weight"] = 0.25
    }
 }
 
@@ -63,6 +70,37 @@ local statWeightTable = {
    [ITEM_MOD_STRENGTH_SHORT] = 1  
 }
 
+local invTypeToSlotNum = {
+   [INVTYPE_AMMO] = 0,
+   [INVTYPE_HEAD] = 1,
+   [INVTYPE_NECK] = 2,
+   [INVTYPE_SHOULDER] = 3,
+   [INVTYPE_BODY] = 4,
+   [INVTYPE_CHEST] = 5,
+   [INVTYPE_ROBE] = 5,
+   [INVTYPE_WAIST] = 6,
+   [INVTYPE_LEGS] = 7,
+   [INVTYPE_FEET] = 8,
+   [INVTYPE_WRIST] = 9,
+   [INVTYPE_HAND] = 10,
+   [INVTYPE_FINGER] = 11, --{11, 12},
+   [INVTYPE_TRINKET] = 13, --{13, 14},
+   [INVTYPE_CLOAK] = 15,
+   [INVTYPE_WEAPON] = 16, --{16, 17},
+   [INVTYPE_SHIELD] = 17,
+   [INVTYPE_2HWEAPON] = 16,
+   [INVTYPE_WEAPONMAINHAND] = 16,
+   [INVTYPE_WEAPONOFFHAND] = 17,
+   [INVTYPE_HOLDABLE] = 17,
+   [INVTYPE_RANGED] = 18,
+   [INVTYPE_THROWN] = 18,
+   [INVTYPE_RANGEDRIGHT] = 18,
+   [INVTYPE_RELIC] = 18,
+   [INVTYPE_TABARD] = 19,
+   [INVTYPE_BAG] = {20, 21, 22, 23},
+   [INVTYPE_QUIVER] = {20, 21, 22, 23},
+}
+
 function colorText(text)
 
    return "\124cff00E5EE" .. text .. "\124r"
@@ -79,26 +117,58 @@ GearGeniePrint("loading...")
 local tooltipFrame = CreateFrame("GameTooltip", "GearGenieTooltip", UIParent, "GameTooltipTemplate")
 
 function GearGenieSetTooltip(link)
+
+   compareRunning = true
+
+   -- get current state of gametooltip
+   --local ttstate = GameTooltip
+
    GearGenieTooltip:SetOwner(_G["GameTooltip"], "ANCHOR_BOTTOM");
 	GearGenieTooltip:ClearLines()
-   --GearGenieTooltip:SetHyperlink(link)
 
-   GearGenieTooltip:SetBackdropBorderColor(GREEN_FONT_COLOR:GetRGB());
+   local tooltipItemScore = GearGenieReadItemStatsFromTooltip()
 
+   local invslot = select(9, GetItemInfo(select(2, GameTooltip:GetItem())))
 
-   GearGenieReadItemStatsFromTooltip()
+   GameTooltip:SetInventoryItem("player", invTypeToSlotNum[_G[invslot]])
+
+   local equippedItemScore = GearGenieReadItemStatsFromTooltip()
 
    --GearGenieTooltip:SetWidth(_G["GameTooltip"]:GetWidth())
 
+   local modColor = GREEN_FONT_COLOR
+   if(tooltipItemScore < equippedItemScore) then
+      modColor = RED_FONT_COLOR
+   end
+
    GearGenieTooltip:AddLine("GearGenie")
-   GearGenieTooltip:AddDoubleLine("This Item:", compareItemScore, HIGHLIGHT_FONT_COLOR.r, HIGHLIGHT_FONT_COLOR.g, HIGHLIGHT_FONT_COLOR.b, GREEN_FONT_COLOR.r, GREEN_FONT_COLOR.g, GREEN_FONT_COLOR.b);
-   GearGenieTooltip:AddDoubleLine("Equipped:", "Value", HIGHLIGHT_FONT_COLOR.r, HIGHLIGHT_FONT_COLOR.g, HIGHLIGHT_FONT_COLOR.b, HIGHLIGHT_FONT_COLOR.r, HIGHLIGHT_FONT_COLOR.g, HIGHLIGHT_FONT_COLOR.b);
+   GearGenieTooltip:AddDoubleLine("This Item:", tooltipItemScore, HIGHLIGHT_FONT_COLOR.r, HIGHLIGHT_FONT_COLOR.g, HIGHLIGHT_FONT_COLOR.b, modColor.r, modColor.g, modColor.b);
+   GearGenieTooltip:AddDoubleLine("Equipped:", equippedItemScore, HIGHLIGHT_FONT_COLOR.r, HIGHLIGHT_FONT_COLOR.g, HIGHLIGHT_FONT_COLOR.b, HIGHLIGHT_FONT_COLOR.r, HIGHLIGHT_FONT_COLOR.g, HIGHLIGHT_FONT_COLOR.b);
+
+   local upgradeper = round(((tooltipItemScore - equippedItemScore) / math.abs(tooltipItemScore)) * 100, 2)
+			--print("upgrade: " .. upgradeper .. "%")
+			if upgradeper then
+				GearGenieTooltip:AddDoubleLine("Change:",
+				upgradeper.."%" or "nil",
+				HIGHLIGHT_FONT_COLOR.r, HIGHLIGHT_FONT_COLOR.g, HIGHLIGHT_FONT_COLOR.b,
+				modColor.r, modColor.g, modColor.b)
+			end
+
+   GearGenieTooltip:SetBackdropBorderColor(modColor:GetRGB());
+
+   GearGenieTooltip:AddLine("")
+   --GearGenieTooltip:AddTexture("Interface/Icons/Spell_Frost_FrostArmor02", {width = 32, height = 32})
 
 
    --GameTooltip:AddTexture(texturePath)
    
    GearGenieTooltip:Show()
 
+
+   -- restore old state of gametooltip
+   --GameTooltip = ttstate
+
+   compareRunning = false
    --local pattern = "|H(.-)|h"
    --local result = string.match(link, pattern)
    --print(result)
@@ -127,6 +197,10 @@ function trim(s)
    return (s:gsub("^%s*(.-)%s*$", "%1"))
 end
 
+function round(num, numDecimalPlaces)
+	local mult = 10^(numDecimalPlaces or 0)
+	return math.floor(num * mult + 0.5) / mult
+  end
 
 function GearGenieReadItemStatsFromTooltip()
 
@@ -161,6 +235,8 @@ function GearGenieReadItemStatsFromTooltip()
       end
    end
 
+   return compareItemScore
+
 end
 
 function GearGenieGetItemStats(link)
@@ -175,6 +251,8 @@ function GearGenieGetItemStats(link)
 end
 
 function GearGenieTooltipHook(tooltip)
+
+   if compareRunning then return end
 
    local name, link = tooltip:GetItem()
 	if not link then
@@ -205,12 +283,12 @@ end
 
 
 GameTooltip:HookScript("OnTooltipSetItem", GearGenieTooltipHook)
-ShoppingTooltip1:HookScript("OnTooltipSetItem", GearGenieTooltipHook)
-ShoppingTooltip2:HookScript("OnTooltipSetItem", GearGenieTooltipHook)
-ItemRefTooltip:HookScript("OnTooltipSetItem", GearGenieTooltipHook)
+--ShoppingTooltip1:HookScript("OnTooltipSetItem", GearGenieTooltipHook)
+--ShoppingTooltip2:HookScript("OnTooltipSetItem", GearGenieTooltipHook)
+--ItemRefTooltip:HookScript("OnTooltipSetItem", GearGenieTooltipHook)
 
 GameTooltip:HookScript("OnHide", GearGenieTooltipHide)
-ShoppingTooltip1:HookScript("OnHide", GearGenieTooltipHide)
-ShoppingTooltip2:HookScript("OnHide", GearGenieTooltipHide)
-ItemRefTooltip:HookScript("OnHide", GearGenieTooltipHide)
+--ShoppingTooltip1:HookScript("OnHide", GearGenieTooltipHide)
+--ShoppingTooltip2:HookScript("OnHide", GearGenieTooltipHide)
+--ItemRefTooltip:HookScript("OnHide", GearGenieTooltipHide)
 
