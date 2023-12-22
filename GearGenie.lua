@@ -1,8 +1,8 @@
 local ggPrefixColor 
 local compareItemStats = {}
 local compareItemScore
-
 local compareRunning = false
+local savedGameTooltipState = {}
 
 local customStatWeigths = {
    [1] = {
@@ -113,7 +113,8 @@ end
 
 GearGeniePrint("loading...")
 
--- creating tooltip for temp storing of item data
+
+
 local tooltipFrame = CreateFrame("GameTooltip", "GearGenieTooltip", UIParent, "GameTooltipTemplate")
 
 function GearGenieSetTooltip(link)
@@ -122,6 +123,7 @@ function GearGenieSetTooltip(link)
 
    -- get current state of gametooltip
    --local ttstate = GameTooltip
+   GearGenieGetCurrentGameTooltip()
 
    GearGenieTooltip:SetOwner(_G["GameTooltip"], "ANCHOR_BOTTOM");
 	GearGenieTooltip:ClearLines()
@@ -131,10 +133,13 @@ function GearGenieSetTooltip(link)
    local invslot = select(9, GetItemInfo(select(2, GameTooltip:GetItem())))
 
    GameTooltip:SetInventoryItem("player", invTypeToSlotNum[_G[invslot]])
-
    local equippedItemScore = GearGenieReadItemStatsFromTooltip()
+   --equippedItemScore = 0
 
    --GearGenieTooltip:SetWidth(_G["GameTooltip"]:GetWidth())
+
+
+   --GearGenieTooltip:SetHyperlink(select(2, GameTooltip:GetItem()))
 
    local modColor = GREEN_FONT_COLOR
    if(tooltipItemScore < equippedItemScore) then
@@ -166,7 +171,7 @@ function GearGenieSetTooltip(link)
 
 
    -- restore old state of gametooltip
-   --GameTooltip = ttstate
+   GearGenieRestoreGameTooltip()
 
    compareRunning = false
    --local pattern = "|H(.-)|h"
@@ -202,6 +207,52 @@ function round(num, numDecimalPlaces)
 	return math.floor(num * mult + 0.5) / mult
   end
 
+function GearGenieGetCurrentGameTooltip() 
+   
+   table.wipe(savedGameTooltipState)
+   
+    for i = 1, GameTooltip:NumLines() do
+        local fontNameL, fontSizeL = _G["GameTooltipTextLeft"..i]:GetFont()
+        local fontNameR, fontSizeR = _G["GameTooltipTextRight"..i]:GetFont()
+        local textL = getglobal("GameTooltipTextLeft"..i):GetText()
+        local textR = getglobal("GameTooltipTextRight"..i):GetText()
+
+        savedGameTooltipState[i] = {
+         ["L"] = {
+            ["Font"] = fontNameL,
+            ["Size"] = fontSizeL,
+            ["Text"] = textL,
+            ["Color"] = {getglobal("GameTooltipTextLeft"..i):GetTextColor()}
+         },
+         ["R"] = {
+            ["Font"] = fontNameR,
+            ["Size"] = fontSizeR,
+            ["Text"] = textR,
+            ["Color"] = {getglobal("GameTooltipTextRight"..i):GetTextColor()}
+         },
+        }
+
+    end
+
+    --print(dump(savedGameTooltipState))
+
+end
+
+function GearGenieRestoreGameTooltip()
+
+   GameTooltip:ClearLines()
+
+   for k,v in pairs(savedGameTooltipState) do
+      --print(k,v)
+      if v["R"]["Text"] then
+         GameTooltip:AddDoubleLine(v["L"]["Text"], v["R"]["Text"], unpack(v["L"]["Color"]), unpack(v["L"]["Color"]))
+      else
+         GameTooltip:AddLine(v["L"]["Text"], unpack(v["L"]["Color"]))
+      end
+    end
+end
+
+
 function GearGenieReadItemStatsFromTooltip()
 
    compareItemScore = 0
@@ -218,7 +269,6 @@ function GearGenieReadItemStatsFromTooltip()
          for k,v in pairs(statWeightTable) do
             local result = string.match(text, "%+(%d+) " .. k)
             if result then
-               --print(result .. ' ' .. ITEM_MOD_STRENGTH_SHORT)
                compareItemScore = compareItemScore + result * v
             end
          end
@@ -226,7 +276,6 @@ function GearGenieReadItemStatsFromTooltip()
          for k,v in pairs(customStatWeigths) do
             local result = string.match(text, v["Match"])
             if result then
-               --print(result .. ' ' .. ITEM_MOD_STRENGTH_SHORT)
                compareItemScore = compareItemScore + result * v["Weight"]
             end
          end
