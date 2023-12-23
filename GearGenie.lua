@@ -245,9 +245,10 @@ function GearGenieRestoreGameTooltip()
    for k,v in pairs(savedGameTooltipState) do
       --print(k,v)
       if v["R"]["Text"] then
-         GameTooltip:AddDoubleLine(v["L"]["Text"], v["R"]["Text"], unpack(v["L"]["Color"]), unpack(v["L"]["Color"]))
+         GameTooltip:AddDoubleLine(v["L"]["Text"], v["R"]["Text"], v["L"]["Color"][1], v["L"]["Color"][2], v["L"]["Color"][3], v["R"]["Color"][1], v["R"]["Color"][2], v["R"]["Color"][3])
       else
-         GameTooltip:AddLine(v["L"]["Text"], unpack(v["L"]["Color"]))
+         --unpack(v["L"]["Color"]) ???
+         GameTooltip:AddLine(v["L"]["Text"], v["L"]["Color"][1], v["L"]["Color"][2], v["L"]["Color"][3], true)
       end
     end
 end
@@ -266,9 +267,14 @@ function GearGenieReadItemStatsFromTooltip()
 
          local text = select(1,string.gsub(trim(getText),",",""));
 
+         if i == 1 then
+            print(text .. " has:")
+         end
+
          for k,v in pairs(statWeightTable) do
             local result = string.match(text, "%+(%d+) " .. k)
             if result then
+               print("-- " .. result .. " " .. k)
                compareItemScore = compareItemScore + result * v
             end
          end
@@ -276,6 +282,7 @@ function GearGenieReadItemStatsFromTooltip()
          for k,v in pairs(customStatWeigths) do
             local result = string.match(text, v["Match"])
             if result then
+               print("-- " .. result .. " " .. v["Name"])
                compareItemScore = compareItemScore + result * v["Weight"]
             end
          end
