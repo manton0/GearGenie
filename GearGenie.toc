@@ -1,7 +1,11 @@
 ## Interface: 30300
-## Version: 1.0.0
+## Version: 1.1.0
 ## Title: GearGenie
 ## Notes: GearGenie - Automatically suggest best gear for you
 ## Author: Discord: the_mazer
+## SavedVariables: GearGenieDB
 
 GearGenie.lua
+GearGenieWeights.lua
+GearGenieConfig.lua
+GearGenieCompare.lua

@@ -1,74 +1,11 @@
-local ggPrefixColor 
 local compareItemStats = {}
 local compareItemScore
 local compareRunning = false
 local savedGameTooltipState = {}
 
-local customStatWeigths = {
-   [1] = {
-      ["Name"] = "DPS",
-      ["Match"] = "%((%d+[.,]%d+) " .. string.lower(DAMAGE_PER_SECOND) .. "%)",
-      ["Weight"] = 1
-   },
-   [2] = {
-      ["Name"] = "Armor",
-      ["Match"] = "(%d+) " .. RESISTANCE0_NAME,
-      ["Weight"] = 0.25
-   }
-}
-
-local statWeightTable = {
-   [ITEM_MOD_AGILITY_SHORT] = 1,
-   [ITEM_MOD_ATTACK_POWER_SHORT] = 1,
-   [ITEM_MOD_BLOCK_RATING_SHORT] = 1,
-   [ITEM_MOD_BLOCK_VALUE_SHORT] = 1,
-   [ITEM_MOD_CRIT_MELEE_RATING_SHORT] = 1,
-   [ITEM_MOD_CRIT_RANGED_RATING_SHORT] = 1,
-   [ITEM_MOD_CRIT_RATING_SHORT] = 1,
-   [ITEM_MOD_CRIT_SPELL_RATING_SHORT] = 1,
-   [ITEM_MOD_CRIT_TAKEN_MELEE_RATING_SHORT] = 1,
-   [ITEM_MOD_CRIT_TAKEN_RANGED_RATING_SHORT] = 1,
-   [ITEM_MOD_CRIT_TAKEN_RATING_SHORT] = 1,
-   [ITEM_MOD_CRIT_TAKEN_SPELL_RATING_SHORT] = 1,
-   [ITEM_MOD_DAMAGE_PER_SECOND_SHORT] = 1,
-   [ITEM_MOD_DEFENSE_SKILL_RATING_SHORT] = 1,
-   [ITEM_MOD_DODGE_RATING_SHORT] = 1,
-   [ITEM_MOD_EXPERTISE_RATING_SHORT] = 1,
-   [ITEM_MOD_FERAL_ATTACK_POWER_SHORT] = 1,
-   [ITEM_MOD_HASTE_MELEE_RATING_SHORT] = 1,
-   [ITEM_MOD_HASTE_RANGED_RATING_SHORT] = 1,
-   [ITEM_MOD_HASTE_RATING_SHORT] = 1,
-   [ITEM_MOD_HEALTH_REGENERATION_SHORT] = 1,
-   [ITEM_MOD_HEALTH_SHORT] = 1,
-   [ITEM_MOD_HIT_MELEE_RATING_SHORT] = 1,
-   [ITEM_MOD_HIT_RANGED_RATING_SHORT] = 1,
-   [ITEM_MOD_HIT_RATING_SHORT] = 1,
-   [ITEM_MOD_HIT_SPELL_RATING_SHORT] = 1,
-   [ITEM_MOD_HIT_TAKEN_MELEE_RATING_SHORT] = 1,
-   [ITEM_MOD_HIT_TAKEN_RANGED_RATING_SHORT] = 1,
-   [ITEM_MOD_HIT_TAKEN_RATING_SHORT] = 1,
-   [ITEM_MOD_HIT_TAKEN_SPELL_RATING_SHORT] = 1,
-   [ITEM_MOD_INTELLECT_SHORT] = 1,
-   [ITEM_MOD_MANA_REGENERATION_SHORT] = 1,
-   [ITEM_MOD_MANA_SHORT] = 1,
-   [ITEM_MOD_PARRY_RATING_SHORT] = 1,
-   [ITEM_MOD_POWER_REGEN0_SHORT] = 1,
-   [ITEM_MOD_POWER_REGEN1_SHORT] = 1,
-   [ITEM_MOD_POWER_REGEN2_SHORT] = 1,
-   [ITEM_MOD_POWER_REGEN3_SHORT] = 1,
-   [ITEM_MOD_POWER_REGEN4_SHORT] = 1,
-   [ITEM_MOD_POWER_REGEN5_SHORT] = 1,
-   [ITEM_MOD_POWER_REGEN6_SHORT] = 1,
-   [ITEM_MOD_RANGED_ATTACK_POWER_SHORT] = 1,
-   [ITEM_MOD_RESILIENCE_RATING_SHORT] = 1,
-   [ITEM_MOD_SPELL_DAMAGE_DONE_SHORT] = 1,
-   [ITEM_MOD_SPELL_HEALING_DONE_SHORT] = 1,
-   [ITEM_MOD_SPELL_PENETRATION_SHORT] = 1,
-   [ITEM_MOD_SPELL_POWER_SHORT] = 1,
-   [ITEM_MOD_SPIRIT_SHORT] = 1,
-   [ITEM_MOD_STAMINA_SHORT] = 1,
-   [ITEM_MOD_STRENGTH_SHORT] = 1  
-}
+-- Populated dynamically by GearGenieApplyWeights() from GearGenieWeights.lua
+statWeightTable = {}
+customStatWeigths = {}
 
 local invTypeToSlotNum = {
    [INVTYPE_AMMO] = 0,
@@ -116,6 +53,54 @@ GearGeniePrint("loading...")
 
 
 local tooltipFrame = CreateFrame("GameTooltip", "GearGenieTooltip", UIParent, "GameTooltipTemplate")
+local scanTooltip = CreateFrame("GameTooltip", "GearGenieScanTooltip", UIParent, "GameTooltipTemplate")
+
+-- Find an item in bags by link, returns bag, slot or nil
+function GearGenieFindInBags(itemLink)
+   for bag = 0, 4 do
+      local numSlots = GetContainerNumSlots(bag)
+      for slot = 1, numSlots do
+         local link = GetContainerItemLink(bag, slot)
+         if link and link == itemLink then
+            return bag, slot
+         end
+      end
+   end
+   return nil, nil
+end
+
+-- Find an item in equipped slots by link, returns inventory slot or nil
+function GearGenieFindEquipped(itemLink)
+   for invSlot = 0, 19 do
+      local link = GetInventoryItemLink("player", invSlot)
+      if link and link == itemLink then
+         return invSlot
+      end
+   end
+   return nil
+end
+
+function GearGenieReadItemStatsByLink(itemLink)
+   GearGenieScanTooltip:SetOwner(UIParent, "ANCHOR_NONE")
+   GearGenieScanTooltip:ClearLines()
+
+   -- Try bag context first (shows scaled stats), then equipped, then fallback to hyperlink
+   local bag, slot = GearGenieFindInBags(itemLink)
+   if bag then
+      GearGenieScanTooltip:SetBagItem(bag, slot)
+   else
+      local invSlot = GearGenieFindEquipped(itemLink)
+      if invSlot then
+         GearGenieScanTooltip:SetInventoryItem("player", invSlot)
+      else
+         GearGenieScanTooltip:SetHyperlink(itemLink)
+      end
+   end
+
+   local score, stats = GearGenieReadItemStatsFromTooltip("GearGenieScanTooltip")
+   GearGenieScanTooltip:Hide()
+   return score, stats
+end
 
 function GearGenieSetTooltip(link)
 
@@ -254,44 +239,43 @@ function GearGenieRestoreGameTooltip()
 end
 
 
-function GearGenieReadItemStatsFromTooltip()
+function GearGenieReadItemStatsFromTooltip(tooltipName)
 
-   compareItemScore = 0
+   tooltipName = tooltipName or "GameTooltip"
+   local tooltip = _G[tooltipName]
+   local score = 0
+   local stats = {}
 
-   for i = 1, GameTooltip:NumLines() do
-		local lineText = getglobal("GameTooltipTextLeft"..i)	
-		if (lineText) then
+   for i = 1, tooltip:NumLines() do
+      local lineText = _G[tooltipName .. "TextLeft" .. i]
+      if (lineText) then
 
          local getText = lineText:GetText();
-			if(getText == nil) then getText = "0,0" end
+         if(getText == nil) then getText = "0,0" end
 
          local text = select(1,string.gsub(trim(getText),",",""));
-
-         if i == 1 then
-            print(text .. " has:")
-         end
 
          for k,v in pairs(statWeightTable) do
             local result = string.match(text, "%+(%d+) " .. k)
             if result then
-               print("-- " .. result .. " " .. k)
-               compareItemScore = compareItemScore + result * v
+               result = tonumber(result)
+               stats[k] = (stats[k] or 0) + result
+               score = score + result * v
             end
          end
 
          for k,v in pairs(customStatWeigths) do
             local result = string.match(text, v["Match"])
             if result then
-               print("-- " .. result .. " " .. v["Name"])
-               compareItemScore = compareItemScore + result * v["Weight"]
+               result = tonumber((string.gsub(result, ",", ".")))
+               stats[v["Name"]] = (stats[v["Name"]] or 0) + result
+               score = score + result * v["Weight"]
             end
          end
-
-         --print(text)
       end
    end
 
-   return compareItemScore
+   return score, stats
 
 end
 
@@ -339,12 +323,23 @@ end
 
 
 GameTooltip:HookScript("OnTooltipSetItem", GearGenieTooltipHook)
---ShoppingTooltip1:HookScript("OnTooltipSetItem", GearGenieTooltipHook)
---ShoppingTooltip2:HookScript("OnTooltipSetItem", GearGenieTooltipHook)
---ItemRefTooltip:HookScript("OnTooltipSetItem", GearGenieTooltipHook)
-
 GameTooltip:HookScript("OnHide", GearGenieTooltipHide)
---ShoppingTooltip1:HookScript("OnHide", GearGenieTooltipHide)
---ShoppingTooltip2:HookScript("OnHide", GearGenieTooltipHide)
---ItemRefTooltip:HookScript("OnHide", GearGenieTooltipHide)
+
+---------------------------------------------------------------------------
+-- Initialization: load saved or auto-detected weights on login
+---------------------------------------------------------------------------
+local initFrame = CreateFrame("Frame")
+initFrame:RegisterEvent("PLAYER_LOGIN")
+initFrame:SetScript("OnEvent", function()
+   if not GearGenieDB then GearGenieDB = {} end
+
+   if GearGenieDB.class and GearGenieDB.spec then
+      GearGenieApplyWeights(GearGenieDB.class, GearGenieDB.spec)
+   else
+      local detectedClass, detectedSpec = GearGenieDetectClass()
+      GearGenieDB.class = detectedClass
+      GearGenieDB.spec = detectedSpec
+      GearGenieApplyWeights(detectedClass, detectedSpec)
+   end
+end)
 
