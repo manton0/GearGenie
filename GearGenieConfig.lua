@@ -6,7 +6,7 @@
 ---------------------------------------------------------------------------
 local f = CreateFrame("Frame", "GearGenieConfigFrame", UIParent)
 f:SetWidth(300)
-f:SetHeight(220)
+f:SetHeight(330)
 f:SetPoint("CENTER", UIParent, "CENTER", 0, 100)
 f:SetMovable(true)
 f:EnableMouse(true)
@@ -122,6 +122,44 @@ UIDropDownMenu_Initialize(classDropdown, function(self, level)
 end)
 
 ---------------------------------------------------------------------------
+-- Filter Checkboxes
+---------------------------------------------------------------------------
+local filterTypeCheck = CreateFrame("CheckButton", "GearGenieFilterTypeCB", f, "UICheckButtonTemplate")
+filterTypeCheck:SetPoint("TOPLEFT", specLabel, "BOTTOMLEFT", -4, -24)
+_G["GearGenieFilterTypeCBText"]:SetText("Skip unusable item types")
+_G["GearGenieFilterTypeCBText"]:SetFontObject(GameFontNormalSmall)
+filterTypeCheck:SetScript("OnClick", function(self)
+   GearGenieDB.filterType = self:GetChecked() and true or false
+end)
+
+local filterLevelCheck = CreateFrame("CheckButton", "GearGenieFilterLevelCB", f, "UICheckButtonTemplate")
+filterLevelCheck:SetPoint("TOPLEFT", filterTypeCheck, "BOTTOMLEFT", 0, -2)
+_G["GearGenieFilterLevelCBText"]:SetText("Skip items above my level")
+_G["GearGenieFilterLevelCBText"]:SetFontObject(GameFontNormalSmall)
+filterLevelCheck:SetScript("OnClick", function(self)
+   GearGenieDB.filterLevel = self:GetChecked() and true or false
+end)
+
+local autoCompareCheck = CreateFrame("CheckButton", "GearGenieAutoCompareCB", f, "UICheckButtonTemplate")
+autoCompareCheck:SetPoint("TOPLEFT", filterLevelCheck, "BOTTOMLEFT", 0, -2)
+_G["GearGenieAutoCompareCBText"]:SetText("Auto-compare new bag items")
+_G["GearGenieAutoCompareCBText"]:SetFontObject(GameFontNormalSmall)
+autoCompareCheck:SetScript("OnClick", function(self)
+   GearGenieDB.autoCompare = self:GetChecked() and true or false
+   if not GearGenieDB.autoCompare and GearGenieClearAllMarkers then
+      GearGenieClearAllMarkers()
+   end
+end)
+
+local rollAdvisorCheck = CreateFrame("CheckButton", "GearGenieRollAdvisorCB", f, "UICheckButtonTemplate")
+rollAdvisorCheck:SetPoint("TOPLEFT", autoCompareCheck, "BOTTOMLEFT", 0, -2)
+_G["GearGenieRollAdvisorCBText"]:SetText("Show score on loot rolls")
+_G["GearGenieRollAdvisorCBText"]:SetFontObject(GameFontNormalSmall)
+rollAdvisorCheck:SetScript("OnClick", function(self)
+   GearGenieDB.rollAdvisor = self:GetChecked() and true or false
+end)
+
+---------------------------------------------------------------------------
 -- Compare Items Button
 ---------------------------------------------------------------------------
 local compareBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
@@ -152,6 +190,12 @@ f:SetScript("OnShow", function()
    UIDropDownMenu_SetText(classDropdown, GearGenieClassNames[selectedClass] or selectedClass)
    UpdateSpecDropdown()
 
+   -- Sync filter checkboxes
+   filterTypeCheck:SetChecked(GearGenieDB.filterType or false)
+   filterLevelCheck:SetChecked(GearGenieDB.filterLevel or false)
+   autoCompareCheck:SetChecked(GearGenieDB.autoCompare or false)
+   rollAdvisorCheck:SetChecked(GearGenieDB.rollAdvisor or false)
+
    -- Show detected info
    local detClass, detSpec = GearGenieDetectClass()
    detectedLabel:SetText("Detected: " .. (GearGenieClassNames[detClass] or detClass) .. " - " .. detSpec)
@@ -178,10 +222,16 @@ SlashCmdList["GEARGENIE"] = function(msg)
       else
          GearGenieCompareFrame:Show()
       end
+   elseif msg == "clear" then
+      if GearGenieClearAllMarkers then
+         GearGenieClearAllMarkers()
+         GearGeniePrint("Bag upgrade markers cleared.")
+      end
    elseif msg == "help" then
       GearGeniePrint("Commands:")
       GearGeniePrint("  /gg - Toggle config window")
       GearGeniePrint("  /gg compare - Toggle comparison window")
+      GearGeniePrint("  /gg clear - Clear bag upgrade markers")
       GearGeniePrint("  /gg help - Show this help")
    else
       GearGeniePrint("Unknown command. Type /gg help for usage.")

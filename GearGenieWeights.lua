@@ -524,3 +524,122 @@ function GearGenieDetectClass()
       return classToken, "None"
    end
 end
+
+---------------------------------------------------------------------------
+-- Class item type proficiency (for usability filtering)
+-- Armor subtypes and weapon subtypes match GetItemInfo() itemSubType strings
+-- Classes not listed (e.g. Hero/Adventurer on classless) skip filtering
+---------------------------------------------------------------------------
+GearGenieClassProficiency = {
+   WARRIOR = {
+      armor  = { Cloth=true, Leather=true, Mail=true, Plate=true, Shields=true },
+      weapon = {
+         ["One-Handed Axes"]=true, ["Two-Handed Axes"]=true,
+         ["One-Handed Maces"]=true, ["Two-Handed Maces"]=true,
+         ["One-Handed Swords"]=true, ["Two-Handed Swords"]=true,
+         ["Daggers"]=true, ["Fist Weapons"]=true, ["Polearms"]=true, ["Staves"]=true,
+         ["Bows"]=true, ["Crossbows"]=true, ["Guns"]=true, ["Thrown"]=true,
+      },
+   },
+   PALADIN = {
+      armor  = { Cloth=true, Leather=true, Mail=true, Plate=true, Shields=true },
+      weapon = {
+         ["One-Handed Axes"]=true, ["Two-Handed Axes"]=true,
+         ["One-Handed Maces"]=true, ["Two-Handed Maces"]=true,
+         ["One-Handed Swords"]=true, ["Two-Handed Swords"]=true,
+         ["Polearms"]=true,
+      },
+   },
+   DEATHKNIGHT = {
+      armor  = { Cloth=true, Leather=true, Mail=true, Plate=true },
+      weapon = {
+         ["One-Handed Axes"]=true, ["Two-Handed Axes"]=true,
+         ["One-Handed Maces"]=true, ["Two-Handed Maces"]=true,
+         ["One-Handed Swords"]=true, ["Two-Handed Swords"]=true,
+         ["Polearms"]=true,
+      },
+   },
+   HUNTER = {
+      armor  = { Cloth=true, Leather=true, Mail=true },
+      weapon = {
+         ["One-Handed Axes"]=true, ["Two-Handed Axes"]=true,
+         ["One-Handed Swords"]=true, ["Two-Handed Swords"]=true,
+         ["Daggers"]=true, ["Fist Weapons"]=true, ["Polearms"]=true, ["Staves"]=true,
+         ["Bows"]=true, ["Crossbows"]=true, ["Guns"]=true, ["Thrown"]=true,
+      },
+   },
+   ROGUE = {
+      armor  = { Cloth=true, Leather=true },
+      weapon = {
+         ["One-Handed Axes"]=true, ["One-Handed Maces"]=true, ["One-Handed Swords"]=true,
+         ["Daggers"]=true, ["Fist Weapons"]=true,
+         ["Bows"]=true, ["Crossbows"]=true, ["Guns"]=true, ["Thrown"]=true,
+      },
+   },
+   SHAMAN = {
+      armor  = { Cloth=true, Leather=true, Mail=true, Shields=true },
+      weapon = {
+         ["One-Handed Axes"]=true, ["Two-Handed Axes"]=true,
+         ["One-Handed Maces"]=true, ["Two-Handed Maces"]=true,
+         ["Daggers"]=true, ["Fist Weapons"]=true, ["Staves"]=true,
+      },
+   },
+   DRUID = {
+      armor  = { Cloth=true, Leather=true },
+      weapon = {
+         ["One-Handed Maces"]=true, ["Two-Handed Maces"]=true,
+         ["Daggers"]=true, ["Fist Weapons"]=true, ["Polearms"]=true, ["Staves"]=true,
+      },
+   },
+   MAGE = {
+      armor  = { Cloth=true },
+      weapon = {
+         ["One-Handed Swords"]=true, ["Daggers"]=true, ["Staves"]=true, ["Wands"]=true,
+      },
+   },
+   PRIEST = {
+      armor  = { Cloth=true },
+      weapon = {
+         ["One-Handed Maces"]=true, ["Daggers"]=true, ["Staves"]=true, ["Wands"]=true,
+      },
+   },
+   WARLOCK = {
+      armor  = { Cloth=true },
+      weapon = {
+         ["One-Handed Swords"]=true, ["Daggers"]=true, ["Staves"]=true, ["Wands"]=true,
+      },
+   },
+   MONK = {
+      armor  = { Cloth=true, Leather=true },
+      weapon = {
+         ["One-Handed Axes"]=true, ["One-Handed Maces"]=true, ["One-Handed Swords"]=true,
+         ["Fist Weapons"]=true, ["Polearms"]=true, ["Staves"]=true,
+      },
+   },
+   DEMONHUNTER = {
+      armor  = { Cloth=true, Leather=true },
+      weapon = {
+         ["One-Handed Axes"]=true, ["One-Handed Swords"]=true,
+         ["Daggers"]=true, ["Fist Weapons"]=true,
+      },
+   },
+}
+
+-- Check if a class can equip an item based on its type
+-- classToken: UnitClass token (e.g. "WARRIOR", "MAGE")
+-- classID: 2=Weapon, 4=Armor
+-- itemSubType: string from GetItemInfo (e.g. "Plate", "One-Handed Swords")
+function GearGenieCanUseItem(classToken, classID, itemSubType)
+   if not classToken or not itemSubType then return true end
+   local prof = GearGenieClassProficiency[classToken]
+   if not prof then return true end -- unknown class (Hero/Adventurer), allow all
+
+   if classID == 4 then -- Armor
+      if itemSubType == "Miscellaneous" then return true end -- rings, trinkets, off-hands
+      return prof.armor and prof.armor[itemSubType] or false
+   elseif classID == 2 then -- Weapon
+      if itemSubType == "Miscellaneous" then return true end -- relics
+      return prof.weapon and prof.weapon[itemSubType] or false
+   end
+   return true
+end

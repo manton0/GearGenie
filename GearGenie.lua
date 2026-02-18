@@ -7,7 +7,7 @@ local savedGameTooltipState = {}
 statWeightTable = {}
 customStatWeigths = {}
 
-local invTypeToSlotNum = {
+GearGenieInvTypeToSlotNum = {
    [INVTYPE_AMMO] = 0,
    [INVTYPE_HEAD] = 1,
    [INVTYPE_NECK] = 2,
@@ -36,6 +36,13 @@ local invTypeToSlotNum = {
    [INVTYPE_TABARD] = 19,
    [INVTYPE_BAG] = {20, 21, 22, 23},
    [INVTYPE_QUIVER] = {20, 21, 22, 23},
+}
+
+-- Multi-slot equip locations (items that can go in more than one slot)
+GearGenieMultiSlotMap = {
+   [INVTYPE_FINGER]  = { 11, 12 },
+   [INVTYPE_TRINKET] = { 13, 14 },
+   [INVTYPE_WEAPON]  = { 16, 17 },
 }
 
 function colorText(text)
@@ -117,7 +124,7 @@ function GearGenieSetTooltip(link)
 
    local invslot = select(9, GetItemInfo(select(2, GameTooltip:GetItem())))
 
-   GameTooltip:SetInventoryItem("player", invTypeToSlotNum[_G[invslot]])
+   GameTooltip:SetInventoryItem("player", GearGenieInvTypeToSlotNum[_G[invslot]])
    local equippedItemScore = GearGenieReadItemStatsFromTooltip()
    --equippedItemScore = 0
 
@@ -290,6 +297,111 @@ function GearGenieGetItemStats(link)
    print(result)
 end
 
+---------------------------------------------------------------------------
+-- Shared helpers for equipped item comparison (used by bags + roll advisor)
+---------------------------------------------------------------------------
+
+-- Returns a list of { slot = N, link = itemLink or nil } for the equipped
+-- item(s) matching an equip location string (e.g. "INVTYPE_HEAD")
+function GearGenieGetEquippedForSlot(equipLocGlobalName)
+   local equipLoc = _G[equipLocGlobalName]
+   if not equipLoc then return {} end
+
+   local results = {}
+   local multiSlots = GearGenieMultiSlotMap[equipLoc]
+   if multiSlots then
+      for _, slotNum in ipairs(multiSlots) do
+         local link = GetInventoryItemLink("player", slotNum)
+         table.insert(results, { slot = slotNum, link = link })
+      end
+   else
+      local slotNum = GearGenieInvTypeToSlotNum[equipLoc]
+      if slotNum and type(slotNum) == "number" then
+         local link = GetInventoryItemLink("player", slotNum)
+         table.insert(results, { slot = slotNum, link = link })
+      end
+   end
+   return results
+end
+
+-- Compare an item against the equipped item(s) for its slot.
+-- Returns: isUpgrade, pctChange, equippedLink, newScore, equippedScore
+-- Returns nil if the item cannot be compared (not weapon/armor, filtered, no equip slot).
+function GearGenieCompareToEquipped(itemLink)
+   local itemID = tonumber(string.match(itemLink, ":(%d+)"))
+   if not itemID then return nil end
+
+   local itemdata = GetItemInfoInstant(itemID)
+   if not itemdata then return nil end
+   if itemdata['classID'] ~= 2 and itemdata['classID'] ~= 4 then return nil end
+
+   -- Apply type filter
+   if GearGenieDB and GearGenieDB.filterType then
+      local _, _, _, _, _, _, itemSubType = GetItemInfo(itemID)
+      local _, playerClass = UnitClass("player")
+      if not GearGenieCanUseItem(playerClass, itemdata['classID'], itemSubType) then
+         return nil
+      end
+   end
+
+   -- Apply level filter
+   if GearGenieDB and GearGenieDB.filterLevel then
+      local _, _, _, _, reqLevel = GetItemInfo(itemID)
+      if reqLevel and reqLevel > UnitLevel("player") then
+         return nil
+      end
+   end
+
+   -- Get equip location
+   local _, _, _, _, _, _, _, _, equipLoc = GetItemInfo(itemLink)
+   if not equipLoc or equipLoc == "" then return nil end
+
+   -- Score the new item
+   local newScore = GearGenieReadItemStatsByLink(itemLink)
+
+   -- Find equipped item(s) for this slot
+   local equippedSlots = GearGenieGetEquippedForSlot(equipLoc)
+   if #equippedSlots == 0 then return nil end
+
+   -- Separate equipped slots with items vs empty
+   local equippedWithItems = {}
+   for _, equipped in ipairs(equippedSlots) do
+      if equipped.link then
+         table.insert(equippedWithItems, equipped)
+      end
+   end
+
+   local worstScore, worstLink
+   if #equippedWithItems == 0 then
+      -- All slots empty: any item is an upgrade
+      worstScore = 0
+      worstLink = nil
+   else
+      -- Compare against the worst equipped item (the one you'd replace)
+      worstScore = math.huge
+      worstLink = nil
+      for _, equipped in ipairs(equippedWithItems) do
+         local eqScore = GearGenieReadItemStatsByLink(equipped.link)
+         if eqScore < worstScore then
+            worstScore = eqScore
+            worstLink = equipped.link
+         end
+      end
+   end
+
+   local isUpgrade = newScore > worstScore
+   local pctChange = 0
+   if worstScore > 0 then
+      pctChange = round(((newScore - worstScore) / math.abs(worstScore)) * 100, 1)
+   elseif newScore > 0 then
+      pctChange = 100
+   end
+
+   return isUpgrade, pctChange, worstLink, newScore, worstScore
+end
+
+---------------------------------------------------------------------------
+
 function GearGenieTooltipHook(tooltip)
 
    if compareRunning then return end
@@ -301,21 +413,30 @@ function GearGenieTooltipHook(tooltip)
 	end
 
    --only show for armor and weapons
-   local itemdata = GetItemInfoInstant(tonumber(string.match(link, ":(%d+)")))
+   local itemID = tonumber(string.match(link, ":(%d+)"))
+   local itemdata = GetItemInfoInstant(itemID)
    if itemdata then
       if itemdata['classID'] == 2 or itemdata['classID'] == 4 then
 
-         --here we do stuff
+         -- Filter: skip items the player's class cannot equip
+         if GearGenieDB and GearGenieDB.filterType then
+            local _, _, _, _, _, _, itemSubType = GetItemInfo(itemID)
+            local _, playerClass = UnitClass("player")
+            if not GearGenieCanUseItem(playerClass, itemdata['classID'], itemSubType) then
+               return
+            end
+         end
+
+         -- Filter: skip items above the player's level
+         if GearGenieDB and GearGenieDB.filterLevel then
+            local _, _, _, _, reqLevel = GetItemInfo(itemID)
+            if reqLevel and reqLevel > UnitLevel("player") then
+               return
+            end
+         end
 
          GearGenieSetTooltip(link)
-         --GearGenieReadItemStatsFromTooltip()
 
-         --GearGenieGetItemStats(link)
-
-         --depending on evaluation, set color of tooltip
-         --tooltip:SetBackdropBorderColor(GREEN_FONT_COLOR.r, GREEN_FONT_COLOR.g, GREEN_FONT_COLOR.b);
-         --tooltip:AddDoubleLine("GearGenie", "Value", HIGHLIGHT_FONT_COLOR.r, HIGHLIGHT_FONT_COLOR.g, HIGHLIGHT_FONT_COLOR.b, GREEN_FONT_COLOR.r, GREEN_FONT_COLOR.g, GREEN_FONT_COLOR.b);
-         
       end
    end
 
@@ -332,6 +453,10 @@ local initFrame = CreateFrame("Frame")
 initFrame:RegisterEvent("PLAYER_LOGIN")
 initFrame:SetScript("OnEvent", function()
    if not GearGenieDB then GearGenieDB = {} end
+   if GearGenieDB.filterType == nil then GearGenieDB.filterType = true end
+   if GearGenieDB.filterLevel == nil then GearGenieDB.filterLevel = false end
+   if GearGenieDB.autoCompare == nil then GearGenieDB.autoCompare = true end
+   if GearGenieDB.rollAdvisor == nil then GearGenieDB.rollAdvisor = true end
 
    if GearGenieDB.class and GearGenieDB.spec then
       GearGenieApplyWeights(GearGenieDB.class, GearGenieDB.spec)
