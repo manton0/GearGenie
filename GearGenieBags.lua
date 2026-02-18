@@ -180,12 +180,8 @@ local function ProcessNewItem(bag, slot, itemLink)
    if isUpgrade == nil then return end -- filtered or not comparable
 
    if isUpgrade then
-      -- Chat notification
-      if equippedLink then
-         GearGeniePrint(itemLink .. " is a " .. pctChange .. "% upgrade over " .. equippedLink .. "!")
-      else
-         GearGeniePrint(itemLink .. " is an upgrade for an empty slot!")
-      end
+      -- Popup notification
+      GearGenieShowUpgradePopup(itemLink, pctChange, equippedLink)
 
       -- Mark the bag slot
       GearGenieMarkBagSlot(bag, slot, pctChange, itemLink)

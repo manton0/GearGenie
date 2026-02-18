@@ -298,6 +298,156 @@ function GearGenieGetItemStats(link)
 end
 
 ---------------------------------------------------------------------------
+-- Upgrade Popup Notification System
+---------------------------------------------------------------------------
+local POPUP_DURATION   = 10    -- seconds before fade starts
+local POPUP_FADE_TIME  = 1     -- seconds to fade out
+local POPUP_HEIGHT     = 44
+local POPUP_WIDTH      = 380
+local POPUP_SPACING    = 4
+local POPUP_MAX        = 4     -- max simultaneous popups
+
+local activePopups = {}
+
+local function RepositionPopups()
+   local anchor = ChatFrame1 or DEFAULT_CHAT_FRAME
+   for i, popup in ipairs(activePopups) do
+      popup:ClearAllPoints()
+      local yOffset = 10 + (i - 1) * (POPUP_HEIGHT + POPUP_SPACING)
+      popup:SetPoint("BOTTOMLEFT", anchor, "TOPLEFT", 0, yOffset)
+   end
+end
+
+local function RemovePopup(popup)
+   for i, p in ipairs(activePopups) do
+      if p == popup then
+         table.remove(activePopups, i)
+         break
+      end
+   end
+   popup:SetScript("OnUpdate", nil)
+   popup:Hide()
+   RepositionPopups()
+end
+
+local function FormatItemName(itemLink)
+   if not itemLink then return "empty slot" end
+   local name, _, quality = GetItemInfo(itemLink)
+   if not name then return "?" end
+   local r, g, b = GetItemQualityColor(quality or 1)
+   return string.format("|cff%02x%02x%02x%s|r", r * 255, g * 255, b * 255, name)
+end
+
+local function CreatePopupFrame()
+   local f = CreateFrame("Frame", nil, UIParent)
+   f:SetWidth(POPUP_WIDTH)
+   f:SetHeight(POPUP_HEIGHT)
+   f:SetFrameStrata("HIGH")
+   f:SetBackdrop({
+      bgFile   = "Interface\\DialogFrame\\UI-DialogBox-Background",
+      edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+      tile = true, tileSize = 16, edgeSize = 12,
+      insets = { left = 3, right = 3, top = 3, bottom = 3 }
+   })
+   f:SetBackdropColor(0, 0, 0, 0.85)
+   f:SetBackdropBorderColor(0, 1, 0, 0.8)
+
+   -- Item icon
+   local icon = f:CreateTexture(nil, "ARTWORK")
+   icon:SetWidth(28)
+   icon:SetHeight(28)
+   icon:SetPoint("LEFT", f, "LEFT", 8, 0)
+   f.icon = icon
+
+   -- GearGenie label
+   local label = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+   label:SetPoint("TOPLEFT", icon, "TOPRIGHT", 6, 0)
+   label:SetTextColor(0, 0.898, 0.933) -- GearGenie cyan
+   label:SetText("GearGenie")
+   f.label = label
+
+   -- Upgrade text
+   local text = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+   text:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 0, -2)
+   text:SetPoint("RIGHT", f, "RIGHT", -22, 0)
+   text:SetJustifyH("LEFT")
+   text:SetWordWrap(false)
+   f.text = text
+
+   -- Close button
+   local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
+   close:SetWidth(18)
+   close:SetHeight(18)
+   close:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, 0)
+   close:SetScript("OnClick", function() RemovePopup(f) end)
+
+   -- Tooltip on hover
+   f:EnableMouse(true)
+   f:SetScript("OnEnter", function(self)
+      if self.itemLink then
+         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+         GameTooltip:SetHyperlink(self.itemLink)
+         GameTooltip:Show()
+      end
+   end)
+   f:SetScript("OnLeave", function(self)
+      GameTooltip:Hide()
+   end)
+
+   f:Hide()
+   return f
+end
+
+function GearGenieShowUpgradePopup(itemLink, pctChange, equippedLink)
+   -- Remove oldest if at max
+   if #activePopups >= POPUP_MAX then
+      RemovePopup(activePopups[1])
+   end
+
+   local popup = CreatePopupFrame()
+   popup.itemLink = itemLink
+
+   -- Set icon
+   local _, _, _, _, _, _, _, _, _, texture = GetItemInfo(itemLink)
+   popup.icon:SetTexture(texture or "Interface\\Icons\\INV_Misc_QuestionMark")
+
+   -- Build text
+   local itemName = FormatItemName(itemLink)
+   if equippedLink then
+      local eqName = FormatItemName(equippedLink)
+      popup.text:SetText(itemName .. "  |cff00ff00+" .. pctChange .. "%|r over " .. eqName)
+   else
+      popup.text:SetText(itemName .. "  |cff00ff00upgrade|r for empty slot!")
+   end
+
+   -- Add to stack and show
+   table.insert(activePopups, popup)
+   RepositionPopups()
+   popup:SetAlpha(1)
+   popup:Show()
+
+   -- Auto-hide: wait POPUP_DURATION then fade over POPUP_FADE_TIME
+   local elapsed = 0
+   local fading = false
+   popup:SetScript("OnUpdate", function(self, dt)
+      elapsed = elapsed + dt
+      if not fading and elapsed >= POPUP_DURATION then
+         fading = true
+         elapsed = 0
+      end
+      if fading then
+         local alpha = 1 - (elapsed / POPUP_FADE_TIME)
+         if alpha <= 0 then
+            self:SetScript("OnUpdate", nil)
+            RemovePopup(self)
+         else
+            self:SetAlpha(alpha)
+         end
+      end
+   end)
+end
+
+---------------------------------------------------------------------------
 -- Shared helpers for equipped item comparison (used by bags + roll advisor)
 ---------------------------------------------------------------------------
 
