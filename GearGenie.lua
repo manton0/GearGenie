@@ -243,6 +243,46 @@ function GearGenieSetTooltip(link)
       end
 
       GearGenieTooltip:SetBackdropBorderColor(borderColor:GetRGB())
+   elseif equipLoc == INVTYPE_2HWEAPON and GetInventoryItemLink("player", 17) then
+      -- 2H weapon while dual-wielding: combine both equipped weapon scores
+      local mhScore, mhStats = readEquippedSlotScore(16)
+      local ohScore, ohStats = readEquippedSlotScore(17)
+      local combinedScore = mhScore + ohScore
+
+      local modColor = GREEN_FONT_COLOR
+      if tooltipItemScore < combinedScore then
+         modColor = RED_FONT_COLOR
+      end
+
+      GearGenieTooltip:AddLine("GearGenie")
+      GearGenieTooltip:AddDoubleLine("This Item:", round(tooltipItemScore, 2),
+         HIGHLIGHT_FONT_COLOR.r, HIGHLIGHT_FONT_COLOR.g, HIGHLIGHT_FONT_COLOR.b,
+         modColor.r, modColor.g, modColor.b)
+      addStatBreakdown("This Item", tooltipItemStats)
+      GearGenieTooltip:AddDoubleLine("Main Hand:", round(mhScore, 2),
+         HIGHLIGHT_FONT_COLOR.r, HIGHLIGHT_FONT_COLOR.g, HIGHLIGHT_FONT_COLOR.b,
+         HIGHLIGHT_FONT_COLOR.r, HIGHLIGHT_FONT_COLOR.g, HIGHLIGHT_FONT_COLOR.b)
+      addStatBreakdown("Main Hand", mhStats)
+      GearGenieTooltip:AddDoubleLine("Off Hand:", round(ohScore, 2),
+         HIGHLIGHT_FONT_COLOR.r, HIGHLIGHT_FONT_COLOR.g, HIGHLIGHT_FONT_COLOR.b,
+         HIGHLIGHT_FONT_COLOR.r, HIGHLIGHT_FONT_COLOR.g, HIGHLIGHT_FONT_COLOR.b)
+      addStatBreakdown("Off Hand", ohStats)
+      GearGenieTooltip:AddDoubleLine("Combined:", round(combinedScore, 2),
+         HIGHLIGHT_FONT_COLOR.r, HIGHLIGHT_FONT_COLOR.g, HIGHLIGHT_FONT_COLOR.b,
+         HIGHLIGHT_FONT_COLOR.r, HIGHLIGHT_FONT_COLOR.g, HIGHLIGHT_FONT_COLOR.b)
+
+      local pct = 0
+      if combinedScore > 0 then
+         pct = round(((tooltipItemScore - combinedScore) / math.abs(combinedScore)) * 100, 2)
+      elseif tooltipItemScore > 0 then
+         pct = 100
+      end
+      GearGenieTooltip:AddDoubleLine("Change:",
+         pct .. "%",
+         HIGHLIGHT_FONT_COLOR.r, HIGHLIGHT_FONT_COLOR.g, HIGHLIGHT_FONT_COLOR.b,
+         modColor.r, modColor.g, modColor.b)
+
+      GearGenieTooltip:SetBackdropBorderColor(modColor:GetRGB())
    else
       -- Single-slot item
       local slotNum = GearGenieInvTypeToSlotNum[equipLoc]
@@ -630,11 +670,28 @@ function GearGenieCompareToEquipped(itemLink)
       end
    end
 
+   -- 2H weapon while dual-wielding: combine both equipped weapon scores
+   local is2HDualWield = false
+   if _G[equipLoc] == INVTYPE_2HWEAPON then
+      local ohLink = GetInventoryItemLink("player", 17)
+      if ohLink and #equippedWithItems > 0 then
+         is2HDualWield = true
+      end
+   end
+
    local worstScore, worstLink
    if #equippedWithItems == 0 then
       -- All slots empty: any item is an upgrade
       worstScore = 0
       worstLink = nil
+   elseif is2HDualWield then
+      -- Sum main hand + off hand scores since 2H replaces both
+      local mhLink = GetInventoryItemLink("player", 16)
+      local ohLink = GetInventoryItemLink("player", 17)
+      local mhScore = mhLink and GearGenieReadItemStatsByLink(mhLink) or 0
+      local ohScore = ohLink and GearGenieReadItemStatsByLink(ohLink) or 0
+      worstScore = mhScore + ohScore
+      worstLink = mhLink
    else
       -- Compare against the worst equipped item (the one you'd replace)
       worstScore = math.huge
@@ -717,10 +774,11 @@ initFrame:SetScript("OnEvent", function()
    if GearGenieDB.autoCompare == nil then GearGenieDB.autoCompare = true end
    if GearGenieDB.rollAdvisor == nil then GearGenieDB.rollAdvisor = true end
 
-   if GearGenieDB.class and GearGenieDB.spec then
+   -- Always verify saved class matches the current character
+   local detectedClass, detectedSpec = GearGenieDetectClass()
+   if GearGenieDB.class and GearGenieDB.spec and GearGenieDB.class == detectedClass then
       GearGenieApplyWeights(GearGenieDB.class, GearGenieDB.spec)
    else
-      local detectedClass, detectedSpec = GearGenieDetectClass()
       GearGenieDB.class = detectedClass
       GearGenieDB.spec = detectedSpec
       GearGenieApplyWeights(detectedClass, detectedSpec)

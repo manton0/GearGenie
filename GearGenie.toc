@@ -3,7 +3,7 @@
 ## Title: GearGenie
 ## Notes: GearGenie - Automatically suggest best gear for you
 ## Author: Discord: the_mazer
-## SavedVariables: GearGenieDB
+## SavedVariablesPerCharacter: GearGenieDB
 
 embeds.xml
 
