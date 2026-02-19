@@ -667,6 +667,16 @@ DrawFiltersPanel = function(container)
    end)
    scroll:AddChild(filterLevel)
 
+   local detailedTooltip = AceGUI:Create("CheckBox")
+   detailedTooltip:SetLabel("Show stat breakdown in tooltip")
+   detailedTooltip:SetFullWidth(true)
+   detailedTooltip:SetValue(GearGenieDB and GearGenieDB.detailedTooltip or false)
+   detailedTooltip:SetCallback("OnValueChanged", function(w, e, val)
+      if not GearGenieDB then GearGenieDB = {} end
+      GearGenieDB.detailedTooltip = val
+   end)
+   scroll:AddChild(detailedTooltip)
+
    local h2 = AceGUI:Create("Heading")
    h2:SetText("Bag Scanner")
    h2:SetFullWidth(true)

@@ -45,6 +45,16 @@ GearGenieMultiSlotMap = {
    [INVTYPE_WEAPON]  = { 16, 17 },
 }
 
+-- Human-readable labels for multi-slot inventory slots
+local GearGenieSlotLabels = {
+   [11] = "Ring 1",
+   [12] = "Ring 2",
+   [13] = "Trinket 1",
+   [14] = "Trinket 2",
+   [16] = "Main Hand",
+   [17] = "Off Hand",
+}
+
 function colorText(text)
 
    return "\124cff00E5EE" .. text .. "\124r"
@@ -109,66 +119,165 @@ function GearGenieReadItemStatsByLink(itemLink)
    return score, stats
 end
 
+-- Read the score of an equipped item directly by slot number.
+-- Uses the hidden scan tooltip with SetInventoryItem.
+local function readEquippedSlotScore(slotNum)
+   GearGenieScanTooltip:SetOwner(UIParent, "ANCHOR_NONE")
+   GearGenieScanTooltip:ClearLines()
+   GearGenieScanTooltip:SetInventoryItem("player", slotNum)
+   local score, stats = GearGenieReadItemStatsFromTooltip("GearGenieScanTooltip")
+   GearGenieScanTooltip:Hide()
+   return score, stats
+end
+
+-- Add small-font stat breakdown lines to the GearGenie sub-tooltip.
+-- label: header text (e.g. "This Item" or "Main Hand")
+-- stats: table of { statName = value } from GearGenieReadItemStatsFromTooltip
+local function addStatBreakdown(label, stats)
+   if not (GearGenieDB and GearGenieDB.detailedTooltip) then return end
+   if not stats then return end
+
+   local lines = {}
+   -- Weighted stats
+   for k, v in pairs(statWeightTable) do
+      if stats[k] and stats[k] > 0 then
+         table.insert(lines, { name = k, value = stats[k], weight = v })
+      end
+   end
+   -- Custom stats (DPS, Armor, etc.)
+   for k, v in pairs(customStatWeigths) do
+      if stats[v["Name"]] and stats[v["Name"]] > 0 then
+         table.insert(lines, { name = v["Name"], value = stats[v["Name"]], weight = v["Weight"] })
+      end
+   end
+
+   if #lines == 0 then return end
+
+   table.sort(lines, function(a, b) return (a.value * a.weight) > (b.value * b.weight) end)
+
+   GearGenieTooltip:AddLine("  " .. label .. " stats:", 0.6, 0.6, 0.6)
+   for _, entry in ipairs(lines) do
+      GearGenieTooltip:AddDoubleLine(
+         "    " .. entry.name,
+         entry.value .. " x" .. round(entry.weight, 2) .. " = " .. round(entry.value * entry.weight, 2),
+         0.6, 0.6, 0.6, 0.6, 0.6, 0.6)
+   end
+end
+
 function GearGenieSetTooltip(link)
 
    compareRunning = true
 
-   -- get current state of gametooltip
-   --local ttstate = GameTooltip
-   GearGenieGetCurrentGameTooltip()
-
-   GearGenieTooltip:SetOwner(_G["GameTooltip"], "ANCHOR_BOTTOM");
-	GearGenieTooltip:ClearLines()
-
-   local tooltipItemScore = GearGenieReadItemStatsFromTooltip()
-
-   local invslot = select(9, GetItemInfo(select(2, GameTooltip:GetItem())))
-
-   GameTooltip:SetInventoryItem("player", GearGenieInvTypeToSlotNum[_G[invslot]])
-   local equippedItemScore = GearGenieReadItemStatsFromTooltip()
-   --equippedItemScore = 0
-
-   --GearGenieTooltip:SetWidth(_G["GameTooltip"]:GetWidth())
-
-
-   --GearGenieTooltip:SetHyperlink(select(2, GameTooltip:GetItem()))
-
-   local modColor = GREEN_FONT_COLOR
-   if(tooltipItemScore < equippedItemScore) then
-      modColor = RED_FONT_COLOR
+   -- Force Ascension's item scaling by triggering the built-in Shift-comparison
+   -- flow. This primes the scaling cache so our subsequent reads return correct
+   -- scaled values. Hide the shopping tooltips if Shift isn't held.
+   if GameTooltip_ShowCompareItem then
+      GameTooltip_ShowCompareItem()
+      if not IsShiftKeyDown() then
+         if ShoppingTooltip1 then ShoppingTooltip1:Hide() end
+         if ShoppingTooltip2 then ShoppingTooltip2:Hide() end
+         if ShoppingTooltip3 then ShoppingTooltip3:Hide() end
+      end
    end
 
-   GearGenieTooltip:AddLine("GearGenie")
-   GearGenieTooltip:AddDoubleLine("This Item:", tooltipItemScore, HIGHLIGHT_FONT_COLOR.r, HIGHLIGHT_FONT_COLOR.g, HIGHLIGHT_FONT_COLOR.b, modColor.r, modColor.g, modColor.b);
-   GearGenieTooltip:AddDoubleLine("Equipped:", equippedItemScore, HIGHLIGHT_FONT_COLOR.r, HIGHLIGHT_FONT_COLOR.g, HIGHLIGHT_FONT_COLOR.b, HIGHLIGHT_FONT_COLOR.r, HIGHLIGHT_FONT_COLOR.g, HIGHLIGHT_FONT_COLOR.b);
+   GearGenieTooltip:SetOwner(_G["GameTooltip"], "ANCHOR_BOTTOM")
+   GearGenieTooltip:ClearLines()
 
-   local upgradeper = round(((tooltipItemScore - equippedItemScore) / math.abs(tooltipItemScore)) * 100, 2)
-			--print("upgrade: " .. upgradeper .. "%")
-			if upgradeper then
-				GearGenieTooltip:AddDoubleLine("Change:",
-				upgradeper.."%" or "nil",
-				HIGHLIGHT_FONT_COLOR.r, HIGHLIGHT_FONT_COLOR.g, HIGHLIGHT_FONT_COLOR.b,
-				modColor.r, modColor.g, modColor.b)
-			end
+   -- Read the hovered item score from GameTooltip (set by the game, has correct scaled stats)
+   local tooltipItemScore, tooltipItemStats = GearGenieReadItemStatsFromTooltip()
 
-   GearGenieTooltip:SetBackdropBorderColor(modColor:GetRGB());
+   local invslot = select(9, GetItemInfo(select(2, GameTooltip:GetItem())))
+   local equipLoc = _G[invslot]
+   local multiSlots = equipLoc and GearGenieMultiSlotMap[equipLoc]
+
+   if multiSlots then
+      -- Multi-slot item (weapon, ring, trinket): show all equipped slots
+      local equippedScores = {}
+      local worstScore = math.huge
+      for _, slotNum in ipairs(multiSlots) do
+         local slotLink = GetInventoryItemLink("player", slotNum)
+         local score, stats = 0, nil
+         if slotLink then
+            score, stats = readEquippedSlotScore(slotNum)
+         end
+         table.insert(equippedScores, { slot = slotNum, score = score, stats = stats })
+         if score < worstScore then
+            worstScore = score
+         end
+      end
+
+      -- Border color: green if the item beats at least the worst equipped slot
+      local borderColor = GREEN_FONT_COLOR
+      if tooltipItemScore < worstScore then
+         borderColor = RED_FONT_COLOR
+      end
+
+      GearGenieTooltip:AddLine("GearGenie")
+      GearGenieTooltip:AddDoubleLine("This Item:", round(tooltipItemScore, 2),
+         HIGHLIGHT_FONT_COLOR.r, HIGHLIGHT_FONT_COLOR.g, HIGHLIGHT_FONT_COLOR.b,
+         HIGHLIGHT_FONT_COLOR.r, HIGHLIGHT_FONT_COLOR.g, HIGHLIGHT_FONT_COLOR.b)
+      addStatBreakdown("This Item", tooltipItemStats)
+
+      for _, entry in ipairs(equippedScores) do
+         local label = GearGenieSlotLabels[entry.slot] or ("Slot " .. entry.slot)
+         -- Equipped score in white
+         GearGenieTooltip:AddDoubleLine(label .. ":", round(entry.score, 2),
+            HIGHLIGHT_FONT_COLOR.r, HIGHLIGHT_FONT_COLOR.g, HIGHLIGHT_FONT_COLOR.b,
+            HIGHLIGHT_FONT_COLOR.r, HIGHLIGHT_FONT_COLOR.g, HIGHLIGHT_FONT_COLOR.b)
+         addStatBreakdown(label, entry.stats)
+         -- Change percentage in green/red
+         local changeColor = GREEN_FONT_COLOR
+         if tooltipItemScore < entry.score then
+            changeColor = RED_FONT_COLOR
+         end
+         local pct = 0
+         if entry.score > 0 then
+            pct = round(((tooltipItemScore - entry.score) / math.abs(entry.score)) * 100, 2)
+         elseif tooltipItemScore > 0 then
+            pct = 100
+         end
+         GearGenieTooltip:AddDoubleLine("Change:",
+            pct .. "%",
+            HIGHLIGHT_FONT_COLOR.r, HIGHLIGHT_FONT_COLOR.g, HIGHLIGHT_FONT_COLOR.b,
+            changeColor.r, changeColor.g, changeColor.b)
+      end
+
+      GearGenieTooltip:SetBackdropBorderColor(borderColor:GetRGB())
+   else
+      -- Single-slot item
+      local slotNum = GearGenieInvTypeToSlotNum[equipLoc]
+      local equippedItemScore, equippedItemStats = readEquippedSlotScore(slotNum)
+
+      local modColor = GREEN_FONT_COLOR
+      if tooltipItemScore < equippedItemScore then
+         modColor = RED_FONT_COLOR
+      end
+
+      GearGenieTooltip:AddLine("GearGenie")
+      GearGenieTooltip:AddDoubleLine("This Item:", round(tooltipItemScore, 2),
+         HIGHLIGHT_FONT_COLOR.r, HIGHLIGHT_FONT_COLOR.g, HIGHLIGHT_FONT_COLOR.b,
+         modColor.r, modColor.g, modColor.b)
+      addStatBreakdown("This Item", tooltipItemStats)
+      GearGenieTooltip:AddDoubleLine("Equipped:", round(equippedItemScore, 2),
+         HIGHLIGHT_FONT_COLOR.r, HIGHLIGHT_FONT_COLOR.g, HIGHLIGHT_FONT_COLOR.b,
+         HIGHLIGHT_FONT_COLOR.r, HIGHLIGHT_FONT_COLOR.g, HIGHLIGHT_FONT_COLOR.b)
+      addStatBreakdown("Equipped", equippedItemStats)
+
+      local upgradeper = round(((tooltipItemScore - equippedItemScore) / math.abs(tooltipItemScore)) * 100, 2)
+      if upgradeper then
+         GearGenieTooltip:AddDoubleLine("Change:",
+            upgradeper .. "%",
+            HIGHLIGHT_FONT_COLOR.r, HIGHLIGHT_FONT_COLOR.g, HIGHLIGHT_FONT_COLOR.b,
+            modColor.r, modColor.g, modColor.b)
+      end
+
+      GearGenieTooltip:SetBackdropBorderColor(modColor:GetRGB())
+   end
 
    GearGenieTooltip:AddLine("")
-   --GearGenieTooltip:AddTexture("Interface/Icons/Spell_Frost_FrostArmor02", {width = 32, height = 32})
-
-
-   --GameTooltip:AddTexture(texturePath)
-   
    GearGenieTooltip:Show()
 
-
-   -- restore old state of gametooltip
-   GearGenieRestoreGameTooltip()
-
    compareRunning = false
-   --local pattern = "|H(.-)|h"
-   --local result = string.match(link, pattern)
-   --print(result)
 end
 
 function GearGenieTooltipHide()
