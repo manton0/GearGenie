@@ -770,7 +770,7 @@ initFrame:RegisterEvent("PLAYER_LOGIN")
 initFrame:SetScript("OnEvent", function()
    if not GearGenieDB then GearGenieDB = {} end
    if GearGenieDB.filterType == nil then GearGenieDB.filterType = true end
-   if GearGenieDB.filterLevel == nil then GearGenieDB.filterLevel = false end
+   if GearGenieDB.filterLevel == nil then GearGenieDB.filterLevel = true end
    if GearGenieDB.autoCompare == nil then GearGenieDB.autoCompare = true end
    if GearGenieDB.rollAdvisor == nil then GearGenieDB.rollAdvisor = true end
 
