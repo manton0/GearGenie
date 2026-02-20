@@ -783,5 +783,15 @@ initFrame:SetScript("OnEvent", function()
       GearGenieDB.spec = detectedSpec
       GearGenieApplyWeights(detectedClass, detectedSpec)
    end
+
+   -- Register with the shared Genie minimap button
+   local GenieMinimap = LibStub("GenieMinimap-1.0", true)
+   if GenieMinimap then
+      GenieMinimap:Register("GearGenie", {
+         { label = "Config",        onClick = function() GearGenieToggleMainWindow() end },
+         { label = "Compare Items", onClick = function() GearGenieOpenToTab("compare") end },
+         { label = "Stat Weights",  onClick = function() GearGenieOpenToTab("weights") end },
+      })
+   end
 end)
 

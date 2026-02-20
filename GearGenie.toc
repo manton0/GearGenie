@@ -1,8 +1,9 @@
 ## Interface: 30300
-## Version: 1.3.0
+## Version: 1.4.0
 ## Title: GearGenie
 ## Notes: GearGenie - Automatically suggest best gear for you
 ## Author: Discord: the_mazer
+## SavedVariables: GenieMinimapDB
 ## SavedVariablesPerCharacter: GearGenieDB
 
 embeds.xml
