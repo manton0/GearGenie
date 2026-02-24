@@ -98,24 +98,47 @@ function GearGenieFindEquipped(itemLink)
 end
 
 function GearGenieReadItemStatsByLink(itemLink)
-   GearGenieScanTooltip:SetOwner(UIParent, "ANCHOR_NONE")
-   GearGenieScanTooltip:ClearLines()
-
    -- Try bag context first (shows scaled stats), then equipped, then fallback to hyperlink
    local bag, slot = GearGenieFindInBags(itemLink)
    if bag then
-      GearGenieScanTooltip:SetBagItem(bag, slot)
-   else
-      local invSlot = GearGenieFindEquipped(itemLink)
-      if invSlot then
-         GearGenieScanTooltip:SetInventoryItem("player", invSlot)
-      else
-         GearGenieScanTooltip:SetHyperlink(itemLink)
+      -- Read bag items via GameTooltip with Ascension scaling-cache
+      -- priming so we get correctly scaled stat values.  The hidden scan
+      -- tooltip alone does not trigger Ascension's item-scaling path.
+      compareRunning = true
+      GameTooltip:SetOwner(UIParent, "ANCHOR_NONE")
+      GameTooltip:SetBagItem(bag, slot)
+      if GameTooltip_ShowCompareItem then
+         GameTooltip_ShowCompareItem()
+         if ShoppingTooltip1 then ShoppingTooltip1:Hide() end
+         if ShoppingTooltip2 then ShoppingTooltip2:Hide() end
+         if ShoppingTooltip3 then ShoppingTooltip3:Hide() end
       end
+      local score, stats = GearGenieReadItemStatsFromTooltip("GameTooltip")
+      GameTooltip:Hide()
+      compareRunning = false
+      return score, stats
    end
 
-   local score, stats = GearGenieReadItemStatsFromTooltip("GearGenieScanTooltip")
-   GearGenieScanTooltip:Hide()
+   -- Equipped and hyperlink items also go through GameTooltip with
+   -- scaling-cache priming so Ascension returns correctly scaled values
+   -- (e.g. loot roll items that are already scaled for the player).
+   compareRunning = true
+   GameTooltip:SetOwner(UIParent, "ANCHOR_NONE")
+   local invSlot = GearGenieFindEquipped(itemLink)
+   if invSlot then
+      GameTooltip:SetInventoryItem("player", invSlot)
+   else
+      GameTooltip:SetHyperlink(itemLink)
+   end
+   if GameTooltip_ShowCompareItem then
+      GameTooltip_ShowCompareItem()
+      if ShoppingTooltip1 then ShoppingTooltip1:Hide() end
+      if ShoppingTooltip2 then ShoppingTooltip2:Hide() end
+      if ShoppingTooltip3 then ShoppingTooltip3:Hide() end
+   end
+   local score, stats = GearGenieReadItemStatsFromTooltip("GameTooltip")
+   GameTooltip:Hide()
+   compareRunning = false
    return score, stats
 end
 
@@ -303,13 +326,16 @@ function GearGenieSetTooltip(link)
          HIGHLIGHT_FONT_COLOR.r, HIGHLIGHT_FONT_COLOR.g, HIGHLIGHT_FONT_COLOR.b)
       addStatBreakdown("Equipped", equippedItemStats)
 
-      local upgradeper = round(((tooltipItemScore - equippedItemScore) / math.abs(tooltipItemScore)) * 100, 2)
-      if upgradeper then
-         GearGenieTooltip:AddDoubleLine("Change:",
-            upgradeper .. "%",
-            HIGHLIGHT_FONT_COLOR.r, HIGHLIGHT_FONT_COLOR.g, HIGHLIGHT_FONT_COLOR.b,
-            modColor.r, modColor.g, modColor.b)
+      local pct = 0
+      if equippedItemScore > 0 then
+         pct = round(((tooltipItemScore - equippedItemScore) / math.abs(equippedItemScore)) * 100, 2)
+      elseif tooltipItemScore > 0 then
+         pct = 100
       end
+      GearGenieTooltip:AddDoubleLine("Change:",
+         pct .. "%",
+         HIGHLIGHT_FONT_COLOR.r, HIGHLIGHT_FONT_COLOR.g, HIGHLIGHT_FONT_COLOR.b,
+         modColor.r, modColor.g, modColor.b)
 
       GearGenieTooltip:SetBackdropBorderColor(modColor:GetRGB())
    end

@@ -1,5 +1,5 @@
 ## Interface: 30300
-## Version: 1.4.0
+## Version: 1.4.1
 ## Title: GearGenie
 ## Notes: GearGenie - Automatically suggest best gear for you
 ## Author: Discord: the_mazer

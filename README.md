@@ -11,6 +11,7 @@ A gear comparison addon for the **Ascension** private server (WoW 3.3.5). GearGe
 - **Classless Realm Support** — On Ascension's classless realm (Hero class), falls back to primary stat detection (Strength, Agility, Intellect, Spirit)
 - **Config UI** — Select your class and spec from dropdowns, changes apply immediately
 - **Scaled Item Support** — Correctly reads Ascension's level-scaled item stats (not just base template values)
+- **Minimap Button** — Quick-access dropdown menu for Config, Compare, and Stat Weights; draggable around the minimap
 - **Persistent Settings** — Your class/spec selection is saved between sessions
 
 ## Installation
@@ -22,6 +23,7 @@ A gear comparison addon for the **Ascension** private server (WoW 3.3.5). GearGe
 
 ## Usage
 
+- **Minimap Button** — Click the Genie minimap button to access Config, Compare Items, and Stat Weights directly from a dropdown menu. Drag the button around the minimap to reposition it.
 - `/gg` — Open the config window to select your class and spec
 - `/gg compare` — Open the comparison window directly
 - `/gg help` — Show all available commands
